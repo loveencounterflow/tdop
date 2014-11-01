@@ -82,7 +82,7 @@ make_parse = ->
     scope = Object.create(original_scope)
     scope.def = {}
     scope.parent = s
-    scope
+    return scope
 
   #---------------------------------------------------------------------------------------------------------
   advance = (id) ->
@@ -90,30 +90,40 @@ make_parse = ->
     o = null
     t = null
     v = null
+    #.......................................................................................................
     token.error 'Expected \'' + id + '\'.'  if id and token.id isnt id
+    #.......................................................................................................
     if token_nr >= tokens.length
       token = symbol_table['(end)']
       return
-    t = tokens[token_nr]
+    #.......................................................................................................
+    t         = tokens[token_nr]
     token_nr += 1
-    v = t.value
-    a = t.type
-    if a is 'name'
-      o = scope.find(v)
-    else if a is 'operator'
-      o = symbol_table[v]
-      t.error 'Unknown operator.'  unless o
-    else if a is 'string' or a is 'number'
-      o = symbol_table['(literal)']
-      a = 'literal'
-    else
-      t.error 'Unexpected token.'
+    v         = t.value
+    a         = t.type
+    #.......................................................................................................
+    switch a
+      #.....................................................................................................
+      when 'name'
+        o = scope.find(v)
+      #.....................................................................................................
+      when 'operator'
+        o = symbol_table[v]
+        t.error 'Unknown operator.'  unless o
+      #.....................................................................................................
+      when 'string', 'number'
+        o = symbol_table['(literal)']
+        a = 'literal'
+      #.....................................................................................................
+      else
+        t.error "Unexpected token #{rpr t}"
+    #.......................................................................................................
     token = Object.create(o)
     token.from = t.from
     token.to = t.to
     token.value = v
     token.arity = a
-    token
+    return token
 
   #---------------------------------------------------------------------------------------------------------
   expression = (rbp) ->
