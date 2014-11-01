@@ -1,6 +1,6 @@
 {
   "name": "tdop",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "https://github.com/douglascrockford/TDOP adapted for NodeJS",
   "main": "lib/main.js",
   "dependencies": {
