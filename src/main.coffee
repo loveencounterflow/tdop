@@ -10,36 +10,33 @@
 
 
 ############################################################################################################
-njs_path                  = require 'path'
-njs_fs                    = require 'fs'
-#...........................................................................................................
-TEXT                      = require 'coffeenode-text'
-TYPES                     = require 'coffeenode-types'
-BNP                       = require 'coffeenode-bitsnpieces'
-#...........................................................................................................
 TRM                       = require 'coffeenode-trm'
 rpr                       = TRM.rpr.bind TRM
 badge                     = 'TDOP'
-log                       = TRM.get_logger 'plain',   badge
-info                      = TRM.get_logger 'info',    badge
-alert                     = TRM.get_logger 'alert',   badge
+# log                       = TRM.get_logger 'plain',   badge
+# info                      = TRM.get_logger 'info',    badge
+# alert                     = TRM.get_logger 'alert',   badge
 debug                     = TRM.get_logger 'debug',   badge
 warn                      = TRM.get_logger 'warn',    badge
-urge                      = TRM.get_logger 'urge',    badge
-whisper                   = TRM.get_logger 'whisper', badge
-help                      = TRM.get_logger 'help',    badge
-echo                      = TRM.echo.bind TRM
+# urge                      = TRM.get_logger 'urge',    badge
+# whisper                   = TRM.get_logger 'whisper', badge
+# help                      = TRM.get_logger 'help',    badge
+# echo                      = TRM.echo.bind TRM
 #...........................................................................................................
+### TAINT modifies `String.prototype` ###
+### TAINT do we want to have a separate tokenizer? ###
+require './tokens'
 
+#===========================================================================================================
 make_parse = ->
-  scope = undefined
-  symbol_table = {}
-  token = undefined
-  tokens = undefined
-  token_nr = undefined
-  itself = ->
-    this
+  scope         = null
+  symbol_table  = {}
+  token         = null
+  tokens        = null
+  token_nr      = null
+  itself        = -> @
 
+  #---------------------------------------------------------------------------------------------------------
   original_scope =
     define: (n) ->
       t = @def[n.value]
@@ -55,7 +52,7 @@ make_parse = ->
 
     find: (n) ->
       e = this
-      o = undefined
+      o = null
       loop
         o = e.def[n]
         return e.def[n]  if o and typeof o isnt 'function'
@@ -79,6 +76,7 @@ make_parse = ->
       n.reserved = true
       return
 
+  #---------------------------------------------------------------------------------------------------------
   new_scope = ->
     s = scope
     scope = Object.create(original_scope)
@@ -86,11 +84,12 @@ make_parse = ->
     scope.parent = s
     scope
 
+  #---------------------------------------------------------------------------------------------------------
   advance = (id) ->
-    a = undefined
-    o = undefined
-    t = undefined
-    v = undefined
+    a = null
+    o = null
+    t = null
+    v = null
     token.error 'Expected \'' + id + '\'.'  if id and token.id isnt id
     if token_nr >= tokens.length
       token = symbol_table['(end)']
@@ -116,8 +115,9 @@ make_parse = ->
     token.arity = a
     token
 
+  #---------------------------------------------------------------------------------------------------------
   expression = (rbp) ->
-    left = undefined
+    left = null
     t = token
     advance()
     left = t.nud()
@@ -127,9 +127,10 @@ make_parse = ->
       left = t.led(left)
     left
 
+  #---------------------------------------------------------------------------------------------------------
   statement = ->
     n = token
-    v = undefined
+    v = null
     if n.std
       advance()
       scope.reserve n
@@ -139,103 +140,119 @@ make_parse = ->
     advance ';'
     v
 
+  #---------------------------------------------------------------------------------------------------------
   statements = ->
     a = []
-    s = undefined
+    s = null
     loop
       break  if token.id is '}' or token.id is '(end)'
       s = statement()
       a.push s  if s
     (if a.length is 0 then null else (if a.length is 1 then a[0] else a))
 
+  #---------------------------------------------------------------------------------------------------------
   block = ->
     t = token
     advance '{'
     t.std()
 
+  #---------------------------------------------------------------------------------------------------------
   original_symbol =
+
+    #.......................................................................................................
     error: (message) ->
+      # console.log( '!!!' + message );
       throw new Error(message)
 
-
-    # console.log( '!!!' + message );
+    #.......................................................................................................
     nud: ->
-
-      # console.log( '©5t9', Object.keys(this));
-      @error 'doesn\'t have a nud: ' + (require('util')).inspect(this)
+      @error "doesn't have a nud: #{rpr @}"
       return
 
+    #.......................................................................................................
     led: (left) ->
-      @error 'Missing operator / led: ' + (require('util')).inspect(this)
+      @error "Missing operator / led: #{rpr @}"
       return
 
+  #---------------------------------------------------------------------------------------------------------
   symbol = (id, bp) ->
-    s = symbol_table[id]
-    bp = bp or 0
+    s   = symbol_table[id]
+    bp  = bp or 0
+    #.......................................................................................................
     if s
       s.lbp = bp  if bp >= s.lbp
+    #.......................................................................................................
     else
       s = Object.create(original_symbol)
       s.id = s.value = id
       s.lbp = bp
       symbol_table[id] = s
-    s
+    #.......................................................................................................
+    return s
 
+  #---------------------------------------------------------------------------------------------------------
   constant = (s, v) ->
     x = symbol(s)
+    #.......................................................................................................
     x.nud = ->
       scope.reserve this
       @value = symbol_table[@id].value
       @arity = 'literal'
       this
-
+    #.......................................................................................................
     x.value = v
-    x
+    return x
 
+  #---------------------------------------------------------------------------------------------------------
   infix = (id, bp, led) ->
     s = symbol(id, bp)
+    #.......................................................................................................
     s.led = led or (left) ->
       @first = left
       @second = expression(bp)
       @arity = 'binary'
       this
+    #.......................................................................................................
+    return s
 
-    s
-
+  #---------------------------------------------------------------------------------------------------------
   infixr = (id, bp, led) ->
     s = symbol(id, bp)
+    #.......................................................................................................
     s.led = led or (left) ->
       @first = left
       @second = expression(bp - 1)
       @arity = 'binary'
       this
+    #.......................................................................................................
+    return s
 
-    s
-
+  #---------------------------------------------------------------------------------------------------------
   assignment = (id) ->
-    infixr id, 10, (left) ->
+    return infixr id, 10, (left) ->
       left.error 'Bad lvalue.'  if left.id isnt '.' and left.id isnt '[' and left.arity isnt 'name'
       @first = left
       @second = expression(9)
       @assignment = true
       @arity = 'binary'
-      this
+      return @
 
-
+  #---------------------------------------------------------------------------------------------------------
   prefix = (id, nud) ->
     s = symbol(id)
     s.nud = nud or ->
       scope.reserve this
       @first = expression(70)
       @arity = 'unary'
-      this
+      return @
+    #.......................................................................................................
+    return s
 
-    s
-
+  #---------------------------------------------------------------------------------------------------------
   stmt = (s, f) ->
     x = symbol(s)
     x.std = f
-    x
+    return x
 
   symbol '(end)'
   symbol '(name)'
@@ -256,7 +273,7 @@ make_parse = ->
   symbol('this').nud = ->
     scope.reserve this
     @arity = 'this'
-    this
+    return @
 
   assignment '='
   assignment '+='
@@ -267,7 +284,7 @@ make_parse = ->
     advance ':'
     @third = expression(0)
     @arity = 'ternary'
-    this
+    return @
 
   infixr '&&', 30
   infixr '||', 30
@@ -288,14 +305,14 @@ make_parse = ->
     @second = token
     @arity = 'binary'
     advance()
-    this
+    return @
 
   infix '[', 80, (left) ->
     @first = left
     @second = expression(0)
     @arity = 'binary'
     advance ']'
-    this
+    return @
 
   infix '(', 80, (left) ->
     a = []
@@ -315,7 +332,7 @@ make_parse = ->
         break  if token.id isnt ','
         advance ','
     advance ')'
-    this
+    return @
 
   prefix '!'
   prefix '-'
@@ -348,7 +365,7 @@ make_parse = ->
     advance '}'
     @arity = 'function'
     scope.pop()
-    this
+    return @
 
   prefix '[', ->
     a = []
@@ -360,12 +377,12 @@ make_parse = ->
     advance ']'
     @first = a
     @arity = 'unary'
-    this
+    return @
 
   prefix '{', ->
     a = []
-    n = undefined
-    v = undefined
+    n = null
+    v = null
     if token.id isnt '}'
       loop
         n = token
@@ -380,7 +397,7 @@ make_parse = ->
     advance '}'
     @first = a
     @arity = 'unary'
-    this
+    return @
 
   stmt '{', ->
     new_scope()
@@ -391,8 +408,8 @@ make_parse = ->
 
   stmt 'var', ->
     a = []
-    n = undefined
-    t = undefined
+    n = null
+    t = null
     loop
       n = token
       n.error 'Expected a new variable name.'  if n.arity isnt 'name'
@@ -422,20 +439,20 @@ make_parse = ->
     else
       @third = null
     @arity = 'statement'
-    this
+    return @
 
   stmt 'return', ->
     @first = expression(0)  if token.id isnt ';'
     advance ';'
     token.error 'Unreachable statement.'  if token.id isnt '}'
     @arity = 'statement'
-    this
+    return @
 
   stmt 'break', ->
     advance ';'
     token.error 'Unreachable statement.'  if token.id isnt '}'
     @arity = 'statement'
-    this
+    return @
 
   stmt 'while', ->
     advance '('
@@ -443,9 +460,10 @@ make_parse = ->
     advance ')'
     @second = block()
     @arity = 'statement'
-    this
+    return @
 
-  (source) ->
+  #---------------------------------------------------------------------------------------------------------
+  return parse = ( source ) ->
     tokens = source.tokens('=<>!+-*&|/%^', '=<>&|')
     token_nr = 0
     new_scope()
@@ -453,6 +471,6 @@ make_parse = ->
     s = statements()
     advance '(end)'
     scope.pop()
-    s
+    return s
 
-module.exports = make_parse()
+module.exports = make_parse # ()
